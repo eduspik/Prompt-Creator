@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { AccountType, ContentType, Persona, GeneratedContent, PromptOption, Selections, HistoryItem } from './types';
+import { AccountType, ContentType, GeneratedContent, PromptOption, Selections, HistoryItem } from './types';
 import { PERSONAS, INFINITE_PROMPT_IDEAS, PROMPT_CATEGORIES_CONFIG, CASSANDRA_PROMPT_CATEGORIES_CONFIG } from './constants';
 import { generateContent, translateToEnglish, generatePromptFromImage } from './services/geminiService';
 import Spinner from './components/Spinner';
@@ -13,13 +13,114 @@ import History from './components/History';
 import { useLanguage } from './contexts/LanguageContext';
 import { ResetIcon, TrashIcon } from './components/icons';
 
+// --- Types for Theme ---
+type ThemeMode = 'static' | 'rgb';
+type RGBSpeed = 'slow' | 'normal' | 'fast';
+
+// --- Helper Components ---
+
+const ThemeCustomizer: React.FC<{
+    activeColor: string;
+    staticColor: string;
+    onStaticColorChange: (color: string) => void;
+    mode: ThemeMode;
+    onModeChange: (mode: ThemeMode) => void;
+    rgbSpeed: RGBSpeed;
+    onRgbSpeedChange: (speed: RGBSpeed) => void;
+}> = ({ activeColor, staticColor, onStaticColorChange, mode, onModeChange, rgbSpeed, onRgbSpeedChange }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    return (
+        <div className="relative z-50">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="flex items-center gap-2 bg-black/40 hover:bg-black/60 border border-white/10 rounded-full px-4 py-2 transition-all backdrop-blur-md group shadow-lg"
+            >
+                <div 
+                    className="w-4 h-4 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.5)]"
+                    style={{ backgroundColor: activeColor }}
+                ></div>
+                <span className="text-xs font-bold text-gray-300 group-hover:text-white uppercase tracking-wider">
+                    {mode === 'rgb' ? 'RGB Mode' : 'Theme'}
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+
+            {isOpen && (
+                <div className="absolute top-full right-0 mt-3 w-64 bg-[#0f172a]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-5 animate-[fadeIn_0.2s_ease-out]">
+                    <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                        <span>🎨</span> Customization
+                    </h3>
+                    
+                    <div className="space-y-4">
+                        {/* Mode Selector */}
+                        <div className="flex bg-black/40 rounded-lg p-1 border border-white/5">
+                            <button
+                                onClick={() => onModeChange('static')}
+                                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${mode === 'static' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+                            >
+                                Static
+                            </button>
+                            <button
+                                onClick={() => onModeChange('rgb')}
+                                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${mode === 'rgb' ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+                            >
+                                RGB 🌈
+                            </button>
+                        </div>
+
+                        {mode === 'static' ? (
+                            <div className="space-y-2">
+                                <label className="text-xs text-gray-400 font-medium">Pick Color</label>
+                                <div className="flex items-center gap-3">
+                                    <div className="relative flex-1 h-10 rounded-lg overflow-hidden ring-1 ring-white/20">
+                                        <input 
+                                            type="color" 
+                                            value={staticColor}
+                                            onChange={(e) => onStaticColorChange(e.target.value)}
+                                            className="absolute -top-[50%] -left-[50%] w-[200%] h-[200%] cursor-pointer"
+                                        />
+                                    </div>
+                                    <div className="text-xs font-mono text-gray-500">{staticColor}</div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <label className="text-xs text-gray-400 font-medium">Cycle Speed</label>
+                                <div className="flex justify-between gap-2">
+                                    {(['slow', 'normal', 'fast'] as RGBSpeed[]).map(speed => (
+                                        <button
+                                            key={speed}
+                                            onClick={() => onRgbSpeedChange(speed)}
+                                            className={`
+                                                flex-1 py-1.5 text-[10px] uppercase font-bold rounded border transition-colors
+                                                ${rgbSpeed === speed 
+                                                    ? 'border-white/30 bg-white/10 text-white' 
+                                                    : 'border-transparent bg-black/20 text-gray-500 hover:text-gray-300'}
+                                            `}
+                                        >
+                                            {speed}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 interface ImageReferenceUploaderProps {
     onImageChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
     onRemoveImage: () => void;
     onDescribeImage: () => void;
     imagePreviewUrl: string | null;
     isDescribing: boolean;
-    personaColor: string;
+    activeColor: string;
 }
 
 const ImageReferenceUploader: React.FC<ImageReferenceUploaderProps> = ({
@@ -28,7 +129,7 @@ const ImageReferenceUploader: React.FC<ImageReferenceUploaderProps> = ({
     onDescribeImage,
     imagePreviewUrl,
     isDescribing,
-    personaColor,
+    activeColor,
 }) => {
     const t = useTranslations();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,7 +139,7 @@ const ImageReferenceUploader: React.FC<ImageReferenceUploaderProps> = ({
     };
 
     return (
-        <div className="mb-6 bg-gray-800/40 border border-dashed border-gray-600 rounded-xl p-4 text-center">
+        <div className="mb-8 bg-white/5 backdrop-blur-sm border border-dashed border-white/10 hover:border-white/30 transition-colors rounded-xl p-6 text-center group">
             <input
                 type="file"
                 ref={fileInputRef}
@@ -47,25 +148,24 @@ const ImageReferenceUploader: React.FC<ImageReferenceUploaderProps> = ({
                 accept="image/png, image/jpeg, image/webp"
             />
             {!imagePreviewUrl && (
-                <div>
-                    <h4 className="text-sm font-semibold text-gray-400 mb-2">{t('imageReferenceLabel')}</h4>
-                    <button
-                        type="button"
-                        onClick={handleUploadClick}
-                        className="text-sm font-semibold transition-colors py-2 px-4 rounded-md bg-gray-700 hover:bg-gray-600"
-                    >
-                        {t('uploadImage')}
-                    </button>
+                <div className="flex flex-col items-center justify-center py-4 cursor-pointer" onClick={handleUploadClick}>
+                    <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mb-3 group-hover:bg-white/20 transition-colors">
+                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <h4 className="text-sm font-medium text-gray-200 mb-1">{t('imageReferenceLabel')}</h4>
+                    <span className="text-xs text-gray-400">{t('uploadImage')}</span>
                 </div>
             )}
             {imagePreviewUrl && (
                 <div className="flex flex-col items-center gap-4">
-                    <div className="relative">
-                        <img src={imagePreviewUrl} alt="Reference Preview" className="max-h-48 rounded-lg shadow-lg" />
+                    <div className="relative group/image">
+                        <img src={imagePreviewUrl} alt="Reference Preview" className="max-h-64 rounded-lg shadow-2xl border border-white/10" />
                         <button
                             type="button"
                             onClick={onRemoveImage}
-                            className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1.5 hover:bg-black/80 transition-colors"
+                            className="absolute top-2 right-2 bg-black/60 hover:bg-red-500/80 text-white rounded-full p-2 transition-all opacity-0 group-hover/image:opacity-100 backdrop-blur-md"
                             aria-label={t('removeImage')}
                         >
                             <TrashIcon className="w-4 h-4" />
@@ -75,7 +175,8 @@ const ImageReferenceUploader: React.FC<ImageReferenceUploaderProps> = ({
                         type="button"
                         onClick={onDescribeImage}
                         disabled={isDescribing}
-                        className={`w-full max-w-xs py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-[${personaColor}] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-[${personaColor}] transition-all flex items-center justify-center gap-2`}
+                        style={{ backgroundColor: activeColor, boxShadow: `0 4px 20px -5px ${activeColor}80` }}
+                        className={`w-full max-w-xs py-2.5 px-6 rounded-lg text-sm font-bold text-white hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none transition-all flex items-center justify-center gap-2`}
                     >
                         {isDescribing && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
                         {isDescribing ? t('describingImage') : t('describeImage')}
@@ -89,29 +190,63 @@ const ImageReferenceUploader: React.FC<ImageReferenceUploaderProps> = ({
 
 const Header: React.FC<{ 
     selectedAccount: AccountType;
-    onAccountChange: (account: AccountType) => void; 
-}> = ({ selectedAccount, onAccountChange }) => {
+    onAccountChange: (account: AccountType) => void;
+    activeColor: string;
+    staticColor: string;
+    onStaticColorChange: (color: string) => void;
+    mode: ThemeMode;
+    onModeChange: (mode: ThemeMode) => void;
+    rgbSpeed: RGBSpeed;
+    onRgbSpeedChange: (speed: RGBSpeed) => void;
+}> = ({ 
+    selectedAccount, 
+    onAccountChange, 
+    activeColor,
+    staticColor,
+    onStaticColorChange,
+    mode,
+    onModeChange,
+    rgbSpeed,
+    onRgbSpeedChange
+}) => {
     const t = useTranslations();
+    
     return (
-        <header className="relative text-center p-4 md:p-6">
-            <div className="absolute top-0 right-0">
+        <header className="relative flex flex-col items-center text-center py-8 md:py-12 px-4">
+            <div className="absolute top-4 left-4 md:left-auto md:right-4 flex items-center gap-3">
+                 <ThemeCustomizer 
+                    activeColor={activeColor}
+                    staticColor={staticColor}
+                    onStaticColorChange={onStaticColorChange}
+                    mode={mode}
+                    onModeChange={onModeChange}
+                    rgbSpeed={rgbSpeed}
+                    onRgbSpeedChange={onRgbSpeedChange}
+                />
                 <LanguageSwitcher />
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-500 mb-2">
-                {t('headerTitle')}
+            
+            <div className="inline-block mb-4 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-gray-300 tracking-wider uppercase backdrop-blur-md shadow-lg">
+                AI Content Studio
+            </div>
+
+            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-3 drop-shadow-2xl">
+                Fanvue <span className="text-transparent bg-clip-text" style={{ backgroundImage: `linear-gradient(to right, #ec4899, ${activeColor}, #6366f1)` }}>Architect</span>
             </h1>
-            <p className="text-gray-400 mb-6 text-sm md:text-base">{t('headerSubtitle')}</p>
-            <div className="inline-flex rounded-lg shadow-sm bg-gray-800 p-1">
+            <p className="text-gray-300 mb-6 text-base md:text-lg max-w-2xl mx-auto leading-relaxed font-light tracking-wide">{t('headerSubtitle')}</p>
+            
+            <div className="bg-black/40 p-1.5 rounded-2xl border border-white/10 inline-flex gap-1 shadow-xl backdrop-blur-md">
                 {Object.values(PERSONAS).map((persona) => {
                     const isSelected = selectedAccount === persona.id;
-                    const selectedClasses = `bg-[${persona.color}] text-white shadow-lg`;
-                    const notSelectedClasses = 'text-gray-300 hover:bg-gray-700/50';
-
                     return (
                         <button
                             key={persona.id}
                             onClick={() => onAccountChange(persona.id)}
-                            className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-[${persona.color}] ${isSelected ? selectedClasses : notSelectedClasses}`}
+                            style={isSelected ? { backgroundColor: activeColor, boxShadow: `0 0 20px -5px ${activeColor}60` } : {}}
+                            className={`
+                                relative px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300
+                                ${isSelected ? 'text-white transform scale-100' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}
+                            `}
                         >
                             {persona.name}
                         </button>
@@ -122,6 +257,49 @@ const Header: React.FC<{
     );
 };
 
+const ContentTypeSelector: React.FC<{
+    selected: ContentType;
+    onChange: (type: ContentType) => void;
+    activeColor: string;
+    t: (key: TranslationKey) => string;
+}> = ({ selected, onChange, activeColor, t }) => {
+    return (
+        <div className="grid grid-cols-2 gap-4 mb-8">
+            {[ContentType.IMAGE_PROMPT, ContentType.POST_TEXT].map((type) => {
+                const isSelected = selected === type;
+                const label = type === ContentType.IMAGE_PROMPT ? t('imagePrompts') : t('postTexts');
+                const icon = type === ContentType.IMAGE_PROMPT ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                );
+
+                return (
+                    <button
+                        key={type}
+                        type="button"
+                        onClick={() => onChange(type)}
+                        className={`relative flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-300 backdrop-blur-md ${
+                            isSelected 
+                                ? 'bg-white/10 border-transparent shadow-xl transform scale-[1.02]' 
+                                : 'bg-white/5 border-transparent hover:bg-white/10 hover:border-white/20 text-gray-400'
+                        }`}
+                        style={isSelected ? { borderColor: activeColor, color: 'white', boxShadow: `0 0 25px -5px ${activeColor}40` } : {}}
+                    >
+                        <div className="mb-2 drop-shadow-md">{icon}</div>
+                        <span className="font-bold text-sm tracking-wide">{label.replace(/^[📷✍️]\s*/, '')}</span>
+                    </button>
+                );
+            })}
+        </div>
+    );
+};
+
+
 const getRandomSubset = <T,>(arr: T[], size: number) => arr.sort(() => 0.5 - Math.random()).slice(0, size);
 
 const App: React.FC = () => {
@@ -130,10 +308,65 @@ const App: React.FC = () => {
     const [selectedAccount, setSelectedAccount] = useState<AccountType>(AccountType.CASSANDRA19);
     const [contentType, setContentType] = useState<ContentType>(ContentType.IMAGE_PROMPT);
     
+    // Theme State
+    const [themeMode, setThemeMode] = useState<ThemeMode>('static');
+    const [rgbSpeed, setRgbSpeed] = useState<RGBSpeed>('normal');
+    const [staticThemeColor, setStaticThemeColor] = useState<string>('');
+    
+    // We maintain a derived activeColor for the UI to consume
+    const [activeColor, setActiveColor] = useState<string>('#EC4899');
+    const hueRef = useRef<number>(0);
+    const animationFrameRef = useRef<number>(0);
+
+    // Background Parallax
+    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+    
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            // Normalized coordinates -1 to 1
+            const x = (e.clientX / window.innerWidth) * 2 - 1;
+            const y = (e.clientY / window.innerHeight) * 2 - 1;
+            setMousePos({ x, y });
+        };
+        window.addEventListener('mousemove', handleMouseMove);
+        return () => window.removeEventListener('mousemove', handleMouseMove);
+    }, []);
+
+    // RGB Loop Logic
+    useEffect(() => {
+        if (themeMode === 'rgb') {
+            const updateRGB = () => {
+                let speedMultiplier = 1;
+                if (rgbSpeed === 'slow') speedMultiplier = 0.2;
+                if (rgbSpeed === 'fast') speedMultiplier = 3;
+
+                hueRef.current = (hueRef.current + 0.5 * speedMultiplier) % 360;
+                const newColor = `hsl(${hueRef.current}, 80%, 60%)`; // Bright, gaming-style saturation/lightness
+                setActiveColor(newColor);
+                animationFrameRef.current = requestAnimationFrame(updateRGB);
+            };
+            updateRGB();
+        } else {
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+            // Revert to static selection or default persona color
+            setActiveColor(staticThemeColor || PERSONAS[selectedAccount].color);
+        }
+
+        return () => {
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+        };
+    }, [themeMode, rgbSpeed, staticThemeColor, selectedAccount]);
+
+    // Keep static color updated when switching accounts if in static mode and no custom override
+    useEffect(() => {
+        if (themeMode === 'static' && !staticThemeColor) {
+            setActiveColor(PERSONAS[selectedAccount].color);
+        }
+    }, [selectedAccount, themeMode, staticThemeColor]);
+
     const [mainAction, setMainAction] = useState<string>('');
     const [promptSelections, setPromptSelections] = useState<Selections>({});
     const [userPrompt, setUserPrompt] = useState<string>('');
-    const [customCategoryInputs, setCustomCategoryInputs] = useState<Record<string, string>>({});
     const [promptBuilderCategories, setPromptBuilderCategories] = useState<PromptCategory[]>([]);
 
     const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
@@ -150,7 +383,6 @@ const App: React.FC = () => {
     const isReusingHistory = useRef(false);
     const reusedSelections = useRef<Selections | null>(null);
     
-    const activePersona = PERSONAS[selectedAccount];
     const activePromptConfig = selectedAccount === AccountType.DIVINESLUTS 
         ? PROMPT_CATEGORIES_CONFIG 
         : CASSANDRA_PROMPT_CATEGORIES_CONFIG;
@@ -170,16 +402,13 @@ const App: React.FC = () => {
         setMainAction('');
         setPromptSelections({});
         setUserPrompt('');
-        setCustomCategoryInputs({});
     }, []);
     
     useEffect(() => {
         if (isReusingHistory.current) {
             const newCategories = activePromptConfig.map(cat => {
                 const selectionsForCat = reusedSelections.current?.[cat.id] || [];
-                
                 const baseOptions = getRandomSubset(cat.optionsPool, cat.initialVisible);
-                
                 const finalOptions = [...baseOptions];
                 selectionsForCat.forEach((selectedOpt: PromptOption) => {
                     if (!finalOptions.some(opt => opt.en === selectedOpt.en)) {
@@ -194,7 +423,6 @@ const App: React.FC = () => {
                 };
             });
             setPromptBuilderCategories(newCategories);
-
             isReusingHistory.current = false;
             reusedSelections.current = null;
             return;
@@ -285,27 +513,6 @@ const App: React.FC = () => {
         });
     };
 
-    const handleCustomOptionAdd = useCallback((categoryId: string) => {
-        const text = customCategoryInputs[categoryId]?.trim();
-        if (!text) return;
-
-        const newOption: PromptOption = { es: text, en: text };
-
-        setPromptBuilderCategories(prev => prev.map(cat => {
-            if (cat.id === categoryId && !cat.options.some(opt => opt.en === newOption.en)) {
-                return { ...cat, options: [...cat.options, newOption] };
-            }
-            return cat;
-        }));
-
-        const categoryConfig = activePromptConfig.find(c => c.id === categoryId);
-        if (categoryConfig) {
-            handleSelectionChange(categoryId, newOption, categoryConfig.singleSelect);
-        }
-        
-        setCustomCategoryInputs(prev => ({ ...prev, [categoryId]: '' }));
-    }, [customCategoryInputs, handleSelectionChange, activePromptConfig]);
-
     const handleGenerateRandomIdea = useCallback(() => {
         setMainAction('');
     
@@ -374,7 +581,7 @@ const App: React.FC = () => {
                  throw new Error('TRANSLATION_FAILED');
             }
 
-            const result = await generateContent(activePersona, contentType, finalTheme);
+            const result = await generateContent(PERSONAS[selectedAccount], contentType, finalTheme);
             setGeneratedContent(result);
             
             const newHistoryItem: HistoryItem = {
@@ -407,7 +614,7 @@ const App: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [userPrompt, isLoading, activePersona, contentType, t, mainAction, promptSelections, selectedAccount, language]);
+    }, [userPrompt, isLoading, contentType, t, mainAction, promptSelections, selectedAccount, language]);
 
     const handleThemeIdeaClick = (idea: PromptOption) => {
         const ideaInCurrentLang = idea[language] || idea.es;
@@ -493,48 +700,88 @@ const App: React.FC = () => {
 
 
     return (
-        <div className="min-h-screen bg-gray-900 text-gray-200 font-sans p-4 relative overflow-hidden">
-             <div className="absolute top-0 left-0 w-full h-full bg-grid-gray-700/[0.2] z-0"></div>
-             <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-gray-900 via-gray-900 to-black z-1"></div>
-             <div className="absolute top-1/4 -left-1/4 w-1/2 h-1/2 bg-gradient-to-tr from-pink-900/40 via-transparent to-purple-900/30 rounded-full blur-3xl filter animate-pulse" style={{ animationDuration: '8s' }}></div>
-             <div className="absolute bottom-0 -right-1/4 w-2/3 h-2/3 bg-gradient-to-bl from-purple-900/30 to-indigo-900/40 rounded-full blur-3xl filter animate-pulse" style={{ animationDuration: '10s' }}></div>
+        <div className="min-h-screen bg-black text-gray-200 font-sans p-4 pb-20 relative selection:bg-white/20 overflow-hidden">
+             {/* Interactive Background */}
+             <div className="fixed inset-0 w-full h-full pointer-events-none z-0">
+                {/* Primary Blob - follows mouse inversely or floats */}
+                <div 
+                    className="absolute w-[60%] h-[60%] rounded-full blur-[130px] opacity-30 transition-transform duration-1000 ease-out will-change-transform"
+                    style={{ 
+                        backgroundColor: activeColor,
+                        top: '-10%',
+                        left: '-10%',
+                        transform: `translate(${mousePos.x * -30}px, ${mousePos.y * -30}px)`
+                    }}
+                ></div>
+                
+                {/* Secondary Blob */}
+                <div 
+                    className="absolute w-[70%] h-[70%] rounded-full blur-[150px] opacity-20 transition-transform duration-1000 ease-out will-change-transform"
+                    style={{ 
+                        backgroundColor: activeColor,
+                        bottom: '-20%',
+                        right: '-10%',
+                         transform: `translate(${mousePos.x * 20}px, ${mousePos.y * 20}px)`
+                    }}
+                ></div>
 
+                {/* Center/Accent Blob - Static but pulsing */}
+                <div 
+                    className="absolute top-[50%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-[40%] h-[40%] rounded-full bg-indigo-900/30 blur-[100px] animate-pulse-slow"
+                ></div>
+             </div>
 
-            <main className="max-w-7xl mx-auto relative z-10">
-                <Header selectedAccount={selectedAccount} onAccountChange={setSelectedAccount} />
+            <main className="max-w-5xl mx-auto relative z-10">
+                <Header 
+                    selectedAccount={selectedAccount} 
+                    onAccountChange={setSelectedAccount} 
+                    activeColor={activeColor}
+                    staticColor={staticThemeColor}
+                    onStaticColorChange={setStaticThemeColor}
+                    mode={themeMode}
+                    onModeChange={setThemeMode}
+                    rgbSpeed={rgbSpeed}
+                    onRgbSpeedChange={setRgbSpeed}
+                />
 
-                <div className="bg-gray-800/50 backdrop-blur-xl border border-gray-700 rounded-2xl p-6 shadow-2xl mt-6">
-                    <form onSubmit={handleSubmit}>
+                <div 
+                    className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-4 md:p-8 shadow-2xl relative overflow-hidden transition-colors duration-500"
+                    style={{ borderColor: `${activeColor}20` }}
+                >
+                     <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
+                    <form onSubmit={handleSubmit} className="relative z-10">
+                        
+                        <ContentTypeSelector 
+                            selected={contentType} 
+                            onChange={setContentType} 
+                            activeColor={activeColor}
+                            t={t}
+                        />
+
                         <div className="mb-8">
-                             <label className="block text-lg font-semibold text-gray-300 mb-3">{t('contentTypeLabel')}</label>
-                            <div className="inline-flex rounded-lg shadow-sm w-full">
-                                <button type="button" onClick={() => setContentType(ContentType.IMAGE_PROMPT)} className={`w-1/2 px-4 py-3 text-sm font-medium rounded-l-lg transition-all ${contentType === ContentType.IMAGE_PROMPT ? `bg-[${activePersona.color}] text-white shadow-md` : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
-                                    {t('imagePrompts')}
-                                </button>
-                                <button type="button" onClick={() => setContentType(ContentType.POST_TEXT)} className={`w-1/2 px-4 py-3 text-sm font-medium rounded-r-lg transition-all ${contentType === ContentType.POST_TEXT ? `bg-[${activePersona.color}] text-white shadow-md` : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
-                                    {t('postTexts')}
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="mb-6">
-                            <div className="flex justify-between items-center mb-3">
-                                <label htmlFor="theme" className="block text-lg font-semibold text-gray-300">{t('promptBuilderLabel')}</label>
+                            <div className="flex justify-between items-end mb-4">
+                                <div>
+                                    <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2 drop-shadow-md">
+                                        {t('promptBuilderLabel')}
+                                    </h2>
+                                    <p className="text-sm text-gray-400 font-light">Select keywords to build your scene.</p>
+                                </div>
                                  <div className="flex items-center gap-2">
                                     <button
                                         type="button"
                                         onClick={resetInputs}
-                                        className="text-xs font-semibold transition-colors flex items-center gap-1.5 py-1 px-2 rounded-md bg-gray-700 hover:bg-gray-600 text-red-400 hover:text-red-300"
+                                        className="text-xs font-medium transition-all flex items-center gap-1.5 py-2 px-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 text-gray-300 hover:text-white backdrop-blur-md"
                                     >
-                                        <ResetIcon className="h-4 w-4" />
+                                        <ResetIcon className="h-3.5 w-3.5" />
                                         {t('resetSelections')}
                                     </button>
                                     <button
                                         type="button"
                                         onClick={handleGenerateRandomIdea}
-                                        className={`text-xs font-semibold transition-colors flex items-center gap-1.5 py-1 px-2 rounded-md bg-gray-700 hover:bg-gray-600 text-[${activePersona.color}]`}
+                                        className="text-xs font-bold transition-all hover:brightness-110 flex items-center gap-1.5 py-2 px-3 rounded-lg text-white shadow-lg backdrop-blur-md"
+                                        style={{ backgroundColor: activeColor, boxShadow: `0 4px 15px -3px ${activeColor}60` }}
                                     >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                         {t('generateRandomIdea')}
                                     </button>
                                 </div>
@@ -546,30 +793,17 @@ const App: React.FC = () => {
                                 onDescribeImage={handleDescribeImage}
                                 imagePreviewUrl={referenceImagePreview}
                                 isDescribing={isDescribingImage}
-                                personaColor={activePersona.color}
+                                activeColor={activeColor}
                             />
                             
-                             <div className="mb-6">
-                                <label className="block text-xs font-medium text-gray-500 mb-2">{t('previewLabel')}</label>
-                                <textarea
-                                    value={userPrompt}
-                                    onChange={(e) => setUserPrompt(e.target.value)}
-                                    rows={4}
-                                    className="w-full bg-gray-900/60 border border-gray-700 text-gray-400 text-sm rounded-lg p-3 font-mono min-h-[80px] focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-purple-500 focus:outline-none transition-shadow"
-                                    placeholder={t('previewPlaceholder')}
-                                />
-                            </div>
                             <PromptBuilder
                                 categories={promptBuilderCategories}
                                 selections={promptSelections}
                                 onSelectionChange={handleSelectionChange}
                                 mainAction={mainAction}
                                 onMainActionChange={setMainAction}
-                                personaColor={activePersona.color}
+                                activeColor={activeColor}
                                 onRefreshCategory={handleRefreshCategory}
-                                customCategoryInputs={customCategoryInputs}
-                                onCustomCategoryInputChange={setCustomCategoryInputs}
-                                onCustomCategoryInputAdd={handleCustomOptionAdd}
                                 onViewMoreCategory={handleViewMoreCategory}
                                 activeConfig={activePromptConfig}
                                 shuffledIdeas={shuffledIdeas}
@@ -578,15 +812,43 @@ const App: React.FC = () => {
                                 onRefreshIdeas={handleRefreshIdeas}
                                 onLoadMoreIdeas={handleLoadMore}
                             />
+
+                             <div className="mt-8 bg-black/30 p-5 rounded-2xl border border-white/10 shadow-inner focus-within:border-white/30 transition-colors">
+                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 pl-1">{t('previewLabel')}</label>
+                                <textarea
+                                    value={userPrompt}
+                                    onChange={(e) => setUserPrompt(e.target.value)}
+                                    rows={3}
+                                    className="w-full bg-transparent border-0 text-gray-200 text-sm font-mono focus:ring-0 resize-none leading-relaxed placeholder-gray-600"
+                                    placeholder={t('previewPlaceholder')}
+                                />
+                            </div>
                         </div>
                         
                         <button
                             type="submit"
                             disabled={isLoading || !userPrompt.trim()}
-                            className={`w-full py-4 px-4 border border-transparent rounded-xl shadow-lg text-lg font-bold text-white bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-pink-500 transition-all transform hover:scale-[1.02] active:scale-100`}
-                            style={{ boxShadow: `0 0 20px -5px ${isLoading ? 'transparent' : activePersona.color}`}}
+                            className={`group relative w-full py-4 px-6 rounded-2xl shadow-2xl text-lg font-black tracking-wide text-white disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none transition-all transform active:scale-[0.99] overflow-hidden`}
+                            style={{ 
+                                background: `linear-gradient(135deg, ${activeColor}, #1f2937)`,
+                                boxShadow: isLoading ? 'none' : `0 10px 40px -10px ${activeColor}80`
+                            }}
                         >
-                            {isLoading ? t('generatingButton') : t('generateButton')}
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+                            <span className="relative flex items-center justify-center gap-3">
+                                {isLoading ? (
+                                    <>
+                                        {t('generatingButton')}
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 drop-shadow-md" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                        </svg>
+                                        {t('generateButton')}
+                                    </>
+                                )}
+                            </span>
                         </button>
                     </form>
                 </div>
@@ -600,13 +862,13 @@ const App: React.FC = () => {
                     />
                 )}
 
-                <div className="mt-12">
-                    {isLoading && <Spinner color={activePersona.color} />}
-                    {error && <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-xl text-center">{error}</div>}
+                <div className="mt-12 scroll-mt-10" id="results">
+                    {isLoading && <Spinner color={activeColor} />}
+                    {error && <div className="bg-red-900/20 border border-red-500/50 text-red-200 px-6 py-4 rounded-xl text-center backdrop-blur-sm animate-pulse shadow-lg">{error}</div>}
                     {generatedContent && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-[fadeIn_0.5s_ease-in-out]">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-[fadeIn_0.6s_ease-out]">
                             {generatedContent.map((contentItem, index) => (
-                                <OutputCard key={index} content={contentItem} personaColor={activePersona.color} />
+                                <OutputCard key={index} content={contentItem} activeColor={activeColor} />
                             ))}
                         </div>
                     )}

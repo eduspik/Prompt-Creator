@@ -7,10 +7,10 @@ type Platform = 'fanvue' | 'instagram' | 'twitter';
 
 interface OutputCardProps {
     content: string | GeneratedPosts;
-    personaColor: string;
+    activeColor: string;
 }
 
-const PostContentDisplay: React.FC<{ post: GeneratedPosts, personaColor: string }> = ({ post, personaColor }) => {
+const PostContentDisplay: React.FC<{ post: GeneratedPosts, activeColor: string }> = ({ post, activeColor }) => {
     const [activeTab, setActiveTab] = useState<Platform>('fanvue');
     const [copied, setCopied] = useState(false);
     const t = useTranslations();
@@ -23,47 +23,43 @@ const PostContentDisplay: React.FC<{ post: GeneratedPosts, personaColor: string 
     }, [post, activeTab]);
     
     const tabs: { id: Platform; icon: React.ReactElement; name: string }[] = [
-        { id: 'fanvue', icon: <FanvueIcon className="w-5 h-5 mr-2" />, name: 'Fanvue' },
-        { id: 'instagram', icon: <InstagramIcon className="w-5 h-5 mr-2" />, name: 'Instagram' },
-        { id: 'twitter', icon: <TwitterIcon className="w-5 h-5 mr-2" />, name: 'Twitter' },
+        { id: 'fanvue', icon: <FanvueIcon className="w-4 h-4 mr-2" />, name: 'Fanvue' },
+        { id: 'instagram', icon: <InstagramIcon className="w-4 h-4 mr-2" />, name: 'Instagram' },
+        { id: 'twitter', icon: <TwitterIcon className="w-4 h-4 mr-2" />, name: 'Twitter' },
     ];
-    
-    const activeColorStyle = {
-      color: personaColor,
-      borderColor: personaColor,
-    };
     
     return (
         <div className="flex flex-col h-full">
-            <div className="border-b border-gray-700">
-                <nav className="-mb-px flex space-x-4" aria-label="Tabs">
-                    {tabs.map(tab => (
+            <div className="bg-black/20 rounded-t-lg p-1 flex space-x-1 mb-4 backdrop-blur-md">
+                {tabs.map(tab => {
+                    const isActive = activeTab === tab.id;
+                    return (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            style={activeTab === tab.id ? activeColorStyle : {}}
-                            className={`${
-                                activeTab === tab.id
-                                    ? `border-b-2 font-semibold`
-                                    : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'
-                            } whitespace-nowrap py-3 px-1 font-medium text-sm flex items-center transition-colors`}
+                            style={isActive ? { backgroundColor: activeColor, color: 'white', boxShadow: `0 2px 10px ${activeColor}40` } : {}}
+                            className={`
+                                flex-1 flex items-center justify-center py-2 rounded-md text-xs font-bold transition-all duration-200
+                                ${isActive ? 'shadow-md' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}
+                            `}
                         >
                             {tab.icon}
-                            {tab.name}
+                            <span className="hidden sm:inline">{tab.name}</span>
                         </button>
-                    ))}
-                </nav>
+                    )
+                })}
             </div>
-            <div className="relative flex-grow mt-4">
-                <p className="text-gray-300 whitespace-pre-wrap text-sm leading-relaxed pb-12">
+
+            <div className="relative flex-grow bg-white/5 rounded-lg p-4 border border-white/5">
+                <p className="text-gray-200 whitespace-pre-wrap text-sm leading-relaxed pb-8 font-light tracking-wide">
                     {post[activeTab]}
                 </p>
                 <button
                     onClick={handleCopy}
-                    className="absolute bottom-0 right-0 p-2 text-gray-400 hover:text-white transition-colors bg-gray-700/50 hover:bg-gray-600 rounded-md"
+                    className="absolute bottom-2 right-2 p-2 text-gray-400 hover:text-white transition-colors bg-black/40 hover:bg-black/60 rounded-lg border border-white/10 hover:border-white/30 backdrop-blur-md"
                     aria-label={t('copyToClipboard')}
                 >
-                    {copied ? <CheckIcon className="w-5 h-5 text-green-400" /> : <ClipboardIcon className="w-5 h-5" />}
+                    {copied ? <CheckIcon className="w-4 h-4 text-green-400" /> : <ClipboardIcon className="w-4 h-4" />}
                 </button>
             </div>
         </div>
@@ -83,33 +79,36 @@ const PromptContentDisplay: React.FC<{ text: string }> = ({ text }) => {
     }, [text]);
 
     return (
-        <div className="relative h-full">
-            <p className="text-gray-300 whitespace-pre-wrap text-sm leading-relaxed pb-12">
-                {text}
-            </p>
+        <div className="relative h-full flex flex-col">
+            <div className="flex-grow bg-white/5 rounded-lg p-4 border border-white/5 font-mono text-sm">
+                 <p className="text-gray-300 whitespace-pre-wrap leading-relaxed pb-8">
+                    {text}
+                </p>
+            </div>
+           
             <button
                 onClick={handleCopy}
-                className="absolute bottom-0 right-0 p-2 text-gray-400 hover:text-white transition-colors bg-gray-700/50 hover:bg-gray-600 rounded-md"
+                className="absolute bottom-3 right-3 p-2 text-gray-400 hover:text-white transition-colors bg-black/40 hover:bg-black/60 rounded-lg border border-white/10 hover:border-white/30 backdrop-blur-md shadow-lg"
                 aria-label={t('copyToClipboard')}
             >
-                {copied ? <CheckIcon className="w-5 h-5 text-green-400" /> : <ClipboardIcon className="w-5 h-5" />}
+                {copied ? <CheckIcon className="w-4 h-4 text-green-400" /> : <ClipboardIcon className="w-4 h-4" />}
             </button>
         </div>
     );
 }
 
-const OutputCard: React.FC<OutputCardProps> = ({ content, personaColor }) => {
-    const gradientStyle = {
-      background: `linear-gradient(to bottom right, ${personaColor}, #8B5CF6)`
-    };
-
+const OutputCard: React.FC<OutputCardProps> = ({ content, activeColor }) => {
     return (
-         <div className="rounded-xl shadow-lg p-0.5" style={gradientStyle}>
-            <div className="bg-gray-800 rounded-lg p-5 min-h-[200px] h-full">
+         <div className="relative group rounded-2xl p-0.5 transition-transform duration-300 hover:-translate-y-1">
+            <div 
+                className="absolute inset-0 rounded-2xl opacity-40 group-hover:opacity-100 transition-opacity duration-500" 
+                style={{ background: `linear-gradient(to bottom right, ${activeColor}, #4B5563)` }}
+            ></div>
+            <div className="relative bg-gray-900/80 backdrop-blur-xl rounded-2xl p-5 min-h-[240px] h-full border border-white/10 shadow-2xl">
                 {typeof content === 'string' ? (
                     <PromptContentDisplay text={content} />
                 ) : (
-                    <PostContentDisplay post={content} personaColor={personaColor}/>
+                    <PostContentDisplay post={content} activeColor={activeColor}/>
                 )}
             </div>
         </div>

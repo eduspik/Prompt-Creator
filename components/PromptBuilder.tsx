@@ -17,11 +17,8 @@ interface PromptBuilderProps {
     onSelectionChange: (category: string, value: PromptOption, isSingleSelect: boolean) => void;
     mainAction: string;
     onMainActionChange: (value: string) => void;
-    personaColor: string;
+    activeColor: string;
     onRefreshCategory: (categoryId: string) => void;
-    customCategoryInputs: Record<string, string>;
-    onCustomCategoryInputChange: (value: Record<string, string>) => void;
-    onCustomCategoryInputAdd: (categoryId: string) => void;
     onViewMoreCategory: (categoryId: string) => void;
     activeConfig: PromptCategoryConfig[];
     shuffledIdeas: PromptOption[];
@@ -37,11 +34,8 @@ const PromptBuilder: React.FC<PromptBuilderProps> = ({
     onSelectionChange,
     mainAction,
     onMainActionChange,
-    personaColor,
+    activeColor,
     onRefreshCategory,
-    customCategoryInputs,
-    onCustomCategoryInputChange,
-    onCustomCategoryInputAdd,
     onViewMoreCategory,
     activeConfig,
     shuffledIdeas,
@@ -53,105 +47,105 @@ const PromptBuilder: React.FC<PromptBuilderProps> = ({
     const { language } = useLanguage();
     const t = useTranslations();
     
-    const handleCustomInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, categoryId: string) => {
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            onCustomCategoryInputAdd(categoryId);
-        }
-    };
-
     return (
         <div className="space-y-8">
-            <textarea
-                value={mainAction}
-                onChange={(e) => onMainActionChange(e.target.value)}
-                placeholder={t('mainActionPlaceholder')}
-                rows={3}
-                className="w-full bg-gray-700/50 border border-gray-600 text-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-purple-500 focus:outline-none transition-shadow placeholder-gray-500"
-            />
+            <div className="relative group">
+                <div className="absolute -inset-1 rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200" style={{ background: `linear-gradient(to right, ${activeColor}, #a855f7)` }}></div>
+                <textarea
+                    value={mainAction}
+                    onChange={(e) => onMainActionChange(e.target.value)}
+                    placeholder={t('mainActionPlaceholder')}
+                    rows={3}
+                    className="relative w-full bg-gray-900/80 backdrop-blur-md border border-white/10 text-gray-100 rounded-xl p-4 shadow-inner focus:ring-1 focus:outline-none transition-all placeholder-gray-500"
+                    style={{ caretColor: activeColor, borderColor: selections ? 'rgba(255,255,255,0.1)' : undefined, '--tw-ring-color': activeColor } as React.CSSProperties}
+                />
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-6">
                 {categories.map((category) => {
                     const fullCategoryConfig = activeConfig.find(c => c.id === category.id);
                     const totalOptionsCount = fullCategoryConfig ? fullCategoryConfig.optionsPool.length : 0;
                     const canShowMore = category.options.length < totalOptionsCount;
+                    const hasSelection = selections[category.id]?.length > 0;
 
                     return (
-                        <div key={category.id} className="bg-gray-800/60 border border-gray-700 rounded-xl p-4 space-y-3">
-                            <div className="flex justify-between items-center">
-                                <h4 className="text-sm font-semibold text-gray-300">{category.label}</h4>
+                        <div 
+                            key={category.id} 
+                            className={`
+                                flex flex-col h-full rounded-2xl p-5 transition-all duration-300 backdrop-blur-md
+                                ${hasSelection ? 'bg-white/10 border-white/20 shadow-xl' : 'bg-white/5 border-white/5 hover:border-white/20'}
+                                border
+                            `}
+                        >
+                            <div className="flex justify-between items-center mb-4">
+                                <h4 className={`text-sm font-bold tracking-wide uppercase ${hasSelection ? 'text-white' : 'text-gray-400'} drop-shadow-sm`}>
+                                    {category.label}
+                                </h4>
                                 <button
                                     type="button"
                                     onClick={() => onRefreshCategory(category.id)}
-                                    className={`text-xs font-semibold transition-colors flex items-center gap-1.5 text-gray-400 hover:text-[${personaColor}]`}
+                                    className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
                                     aria-label={`${t('refreshAria')} ${category.label}`}
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h5m-5 2a9 9 0 0115.46-4.06M20 20v-5h-5m5-2a9 9 0 01-15.46 4.06"/></svg>
                                 </button>
                             </div>
-                            <div className="flex flex-wrap gap-2">
+                            
+                            <div className="flex flex-wrap gap-2 mb-4">
                                 {category.options.map(value => {
                                     const isSelected = selections[category.id]?.some(sel => sel.en === value.en);
-                                    const selectedClasses = `bg-[${personaColor}] text-white ring-2 ring-offset-2 ring-offset-gray-800 ring-[${personaColor}]`;
-                                    const notSelectedClasses = 'bg-gray-600/70 text-gray-300 hover:bg-gray-500/70';
-
+                                    
                                     return (
                                         <button
                                             type="button"
                                             key={value.en}
                                             onClick={() => onSelectionChange(category.id, value, category.singleSelect)}
-                                            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all transform hover:scale-105 ${isSelected ? selectedClasses : notSelectedClasses}`}
+                                            style={isSelected ? { backgroundColor: activeColor, borderColor: activeColor, boxShadow: `0 2px 10px -2px ${activeColor}80` } : {}}
+                                            className={`
+                                                px-3 py-1.5 text-xs font-medium rounded-full border transition-all active:scale-95
+                                                ${isSelected 
+                                                    ? 'text-white' 
+                                                    : 'bg-black/20 border-white/10 text-gray-400 hover:border-white/30 hover:text-gray-200 hover:bg-white/5'}
+                                            `}
                                         >
                                             {value[language] || value.es}
                                         </button>
                                     );
                                 })}
                             </div>
-                             {canShowMore && (
-                                <button
-                                    type="button"
-                                    onClick={() => onViewMoreCategory(category.id)}
-                                    className={`w-full text-center mt-2 text-xs text-[${personaColor}] hover:opacity-80 font-semibold transition-colors`}
-                                >
-                                    {t('viewMoreOptions')}
-                                </button>
-                            )}
-
-                            <div className="flex items-center gap-2 pt-2">
-                                <input
-                                    type="text"
-                                    value={customCategoryInputs[category.id] || ''}
-                                    onChange={(e) => onCustomCategoryInputChange({ ...customCategoryInputs, [category.id]: e.target.value })}
-                                    onKeyDown={(e) => handleCustomInputKeyDown(e, category.id)}
-                                    placeholder={t('addYourOwn')}
-                                    className="flex-grow w-full bg-gray-700 border border-gray-600 text-gray-200 text-xs rounded-md p-1.5 focus:ring-1 focus:ring-offset-1 focus:ring-offset-gray-800 focus:ring-purple-500 focus:outline-none"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => onCustomCategoryInputAdd(category.id)}
-                                    className={`px-2.5 py-1.5 text-xs font-bold text-white bg-[${personaColor}] rounded-md hover:opacity-90 transition-opacity flex-shrink-0`}
-                                >
-                                    {t('add')}
-                                </button>
+                            
+                            <div className="mt-auto pt-2">
+                                {canShowMore && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onViewMoreCategory(category.id)}
+                                        className="w-full py-2 text-xs font-semibold text-gray-500 hover:text-gray-300 border border-dashed border-white/10 rounded-lg hover:border-white/30 transition-colors hover:bg-white/5"
+                                    >
+                                        {t('viewMoreOptions')}
+                                    </button>
+                                )}
                             </div>
                         </div>
                     );
                 })}
             </div>
             
-            <div className="mt-8 pt-6 border-t border-gray-700">
-                <div className="flex justify-between items-center mb-3">
-                    <h4 className="text-base font-semibold text-gray-300">{t('needInspiration')}</h4>
+            <div className="mt-12 bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-6 md:p-8 shadow-2xl">
+                <div className="flex justify-between items-center mb-6">
+                    <div className="flex items-center gap-2">
+                        <span className="text-2xl drop-shadow-md">💡</span>
+                        <h4 className="text-lg font-bold text-white drop-shadow-md">{t('needInspiration')}</h4>
+                    </div>
                     <button
                         type="button"
                         onClick={onRefreshIdeas}
-                        className={`text-xs font-semibold transition-colors flex items-center gap-1.5 text-gray-400 hover:text-[${personaColor}]`}
+                        className="p-2 rounded-full bg-black/30 text-gray-400 hover:text-white hover:bg-white/10 transition-all"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h5M20 20v-5h-5M20 4h-5v5M4 20h5v-5"/></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h5M20 20v-5h-5M20 4h-5v5M4 20h5v-5"/></svg>
                     </button>
                 </div>
-                <p className="text-sm text-gray-400 mb-4">{t('inspirationSubtitle')}</p>
-                <div className="flex flex-wrap gap-2">
+                
+                <div className="flex flex-wrap gap-3">
                     {shuffledIdeas.slice(0, visibleIdeasCount).map(idea => {
                         const isSelected = mainAction === (idea[language] || idea.es);
                         return (
@@ -159,7 +153,13 @@ const PromptBuilder: React.FC<PromptBuilderProps> = ({
                                 type="button"
                                 key={idea.en}
                                 onClick={() => onThemeIdeaClick(idea)}
-                                className={`px-3 py-1 text-xs font-medium rounded-full transition-all ${isSelected ? `bg-[${personaColor}] text-white` : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'}`}
+                                style={isSelected ? { backgroundColor: activeColor, borderColor: activeColor, boxShadow: `0 4px 15px ${activeColor}60` } : {}}
+                                className={`
+                                    px-4 py-2 text-xs font-medium rounded-full border transition-all hover:-translate-y-0.5
+                                    ${isSelected 
+                                        ? 'text-white' 
+                                        : 'bg-black/20 border-white/10 text-gray-400 hover:border-white/30 hover:text-gray-200 hover:bg-white/5'}
+                                `}
                             >
                                 {idea[language] || idea.es}
                             </button>
@@ -170,7 +170,7 @@ const PromptBuilder: React.FC<PromptBuilderProps> = ({
                     <button
                         type="button"
                         onClick={onLoadMoreIdeas}
-                        className={`w-full text-center mt-3 text-xs text-[${personaColor}] hover:opacity-80 font-semibold transition-colors`}
+                        className="block w-full text-center mt-6 py-2 text-xs text-gray-500 hover:text-white uppercase tracking-widest font-semibold transition-colors"
                     >
                         {t('loadMoreIdeas')}
                     </button>
